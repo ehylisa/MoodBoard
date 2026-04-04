@@ -476,6 +476,77 @@
       letter-spacing: 0.02em;
     }
 
+    /* ── Link card ── */
+    .link-card {
+      position: absolute;
+      width: 220px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .link-card-inner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      transition: background 0.12s;
+    }
+
+    .link-card-inner:hover { background: #f5f4f0; }
+
+    .link-card-favicon {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      object-fit: contain;
+    }
+
+    .link-card-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .link-card-label {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #1a1a1a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .link-card-domain {
+      font-size: 11px;
+      color: #aaa;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .link-card-arrow {
+      flex-shrink: 0;
+      color: #ccc;
+    }
+
+    .link-card:hover .card-delete { opacity: 1; }
+
+    html[data-theme="dark"] .link-card {
+      background: #242424;
+      border-color: rgba(255,255,255,0.07);
+    }
+    html[data-theme="dark"] .link-card-inner:hover { background: #2e2e2e; }
+    html[data-theme="dark"] .link-card-label  { color: #e8e8e4; }
+    html[data-theme="dark"] .link-card-domain { color: #555; }
+
     /* ── Text dialog ── */
     .dialog-backdrop {
       position: fixed;
@@ -598,7 +669,8 @@
     /* ── Drag ── */
     .color-card,
     .image-card,
-    .text-card {
+    .text-card,
+    .link-card {
       cursor: grab;
       transition: box-shadow 0.15s;
       user-select: none;
@@ -909,6 +981,13 @@
           </svg>
           Add Text
         </button>
+        <button class="toolbar-btn" id="btn-add-link">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M5.5 8.5a3.5 3.5 0 0 0 4.95 0l1.5-1.5a3.5 3.5 0 0 0-4.95-4.95l-.87.87"/>
+            <path d="M8.5 5.5a3.5 3.5 0 0 0-4.95 0L2.05 7a3.5 3.5 0 0 0 4.95 4.95l.87-.87"/>
+          </svg>
+          Add Link
+        </button>
       </div>
 
       <div class="toolbar-divider"></div>
@@ -1001,6 +1080,25 @@
     </svg>
   </button>
 
+  <!-- Link dialog -->
+  <div class="dialog-backdrop" id="link-dialog" style="display:none" role="dialog" aria-modal="true">
+    <div class="dialog">
+      <h2>Add Link</h2>
+      <div class="dialog-field">
+        <label for="link-url-input">URL</label>
+        <input id="link-url-input" type="url" placeholder="https://example.com" />
+      </div>
+      <div class="dialog-field">
+        <label for="link-label-input">Label <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+        <input id="link-label-input" type="text" placeholder="Leave blank to use page domain" />
+      </div>
+      <div class="dialog-actions">
+        <button class="dialog-btn" id="link-dialog-cancel">Cancel</button>
+        <button class="dialog-btn primary" id="link-dialog-add">Add</button>
+      </div>
+    </div>
+  </div>
+
   <!-- hidden native color picker -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <input type="color" id="color-picker" style="position:fixed;opacity:0;width:0;height:0;top:0;left:0;" />
@@ -1048,7 +1146,8 @@
         const y = parseFloat(card.style.top)  || 0;
         if (card.classList.contains('color-card')) return { type: 'color', hex: card.dataset.hex, x, y };
         if (card.classList.contains('image-card')) return { type: 'image', url: card.dataset.url, x, y };
-        if (card.classList.contains('text-card')) return { type: 'text', text: card.dataset.text, font: card.dataset.font, size: card.dataset.size, x, y };
+        if (card.classList.contains('text-card'))  return { type: 'text', text: card.dataset.text, font: card.dataset.font, size: card.dataset.size, x, y };
+        if (card.classList.contains('link-card'))  return { type: 'link', url: card.dataset.url, label: card.dataset.label, x, y };
         return null;
       }).filter(Boolean);
     }
@@ -1077,6 +1176,8 @@
         } else if (item.type === 'text' && item.text) {
           await loadGoogleFont(item.font);
           addTextCard({ text: item.text, font: item.font || '', size: item.size || 'md' }, { save: false, ...pos });
+        } else if (item.type === 'link' && item.url) {
+          addLinkCard(item.url, item.label || '', { save: false, ...pos });
         }
       }
     }
@@ -1212,7 +1313,7 @@
 
     // ── Free-form drag (pointer events) ──
     function cards() {
-      return [...grid.querySelectorAll('.color-card, .image-card, .text-card')];
+      return [...grid.querySelectorAll('.color-card, .image-card, .text-card, .link-card')];
     }
 
     function getDefaultPosition() {
@@ -1229,27 +1330,37 @@
       card.addEventListener('pointerdown', (e) => {
         if (e.target.closest('.card-delete, .card-edit')) return;
         if (e.button !== 0) return;
-        e.preventDefault();
 
-        card.setPointerCapture(e.pointerId);
-
-        const startPX = e.clientX;
-        const startPY = e.clientY;
+        const startPX  = e.clientX;
+        const startPY  = e.clientY;
         const origLeft = parseFloat(card.style.left) || 0;
         const origTop  = parseFloat(card.style.top)  || 0;
-
-        card.classList.add('dragging');
+        let didDrag = false;
 
         function onMove(e) {
-          card.style.left = Math.max(0, origLeft + e.clientX - startPX) + 'px';
-          card.style.top  = Math.max(0, origTop  + e.clientY - startPY) + 'px';
+          const dx = e.clientX - startPX;
+          const dy = e.clientY - startPY;
+
+          if (!didDrag) {
+            if (Math.hypot(dx, dy) < 5) return; // below threshold — not a drag yet
+            didDrag = true;
+            card.setPointerCapture(e.pointerId);
+            card.classList.add('dragging');
+          }
+
+          card.style.left = Math.max(0, origLeft + dx) + 'px';
+          card.style.top  = Math.max(0, origTop  + dy) + 'px';
         }
 
         function onUp() {
           card.classList.remove('dragging');
           card.removeEventListener('pointermove', onMove);
           card.removeEventListener('pointerup', onUp);
-          saveBoard();
+          if (didDrag) {
+            saveBoard();
+            // Suppress the click that fires after pointerup so links don't open on drag-release
+            card.addEventListener('click', e => e.preventDefault(), { once: true, capture: true });
+          }
         }
 
         card.addEventListener('pointermove', onMove);
@@ -1464,6 +1575,109 @@
       grid.appendChild(card);
       if (save) saveBoard();
     }
+
+    // ── Link card ──
+    const linkDialog      = document.getElementById('link-dialog');
+    const linkUrlInput    = document.getElementById('link-url-input');
+    const linkLabelInput  = document.getElementById('link-label-input');
+
+    function getDomain(url) {
+      try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+    }
+
+    function addLinkCard(url, label, { save = true, x, y } = {}) {
+      hideEmpty();
+
+      const domain = getDomain(url);
+      const displayLabel = label || domain;
+      const faviconSrc = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+
+      const card = document.createElement('div');
+      card.className = 'link-card';
+      card.dataset.url   = url;
+      card.dataset.label = label;
+      const pos = (x != null && y != null) ? { x, y } : getDefaultPosition();
+      card.style.left = pos.x + 'px';
+      card.style.top  = pos.y + 'px';
+
+      const anchor = document.createElement('a');
+      anchor.className = 'link-card-inner';
+      anchor.href = url;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+
+      const favicon = document.createElement('img');
+      favicon.className = 'link-card-favicon';
+      favicon.src = faviconSrc;
+      favicon.alt = '';
+      favicon.onerror = () => { favicon.style.display = 'none'; };
+
+      const info = document.createElement('div');
+      info.className = 'link-card-info';
+
+      const labelEl = document.createElement('span');
+      labelEl.className = 'link-card-label';
+      labelEl.textContent = displayLabel;
+
+      const domainEl = document.createElement('span');
+      domainEl.className = 'link-card-domain';
+      domainEl.textContent = domain;
+
+      const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      arrow.setAttribute('class', 'link-card-arrow');
+      arrow.setAttribute('width', '11');
+      arrow.setAttribute('height', '11');
+      arrow.setAttribute('viewBox', '0 0 11 11');
+      arrow.setAttribute('fill', 'none');
+      arrow.setAttribute('stroke', 'currentColor');
+      arrow.setAttribute('stroke-width', '1.6');
+      arrow.innerHTML = '<path d="M2 9L9 2M9 2H4M9 2v5"/>';
+
+      info.append(labelEl, domainEl);
+      anchor.append(favicon, info, arrow);
+
+      const del = document.createElement('button');
+      del.className = 'card-delete';
+      del.title = 'Remove';
+      del.textContent = '×';
+      del.addEventListener('click', () => removeCard(card));
+
+      card.append(anchor, del);
+      makeDraggable(card);
+      grid.appendChild(card);
+      if (save) saveBoard();
+    }
+
+    document.getElementById('btn-add-link').addEventListener('click', () => {
+      linkUrlInput.value   = '';
+      linkLabelInput.value = '';
+      linkDialog.style.display = 'flex';
+      setTimeout(() => linkUrlInput.focus(), 50);
+    });
+
+    document.getElementById('link-dialog-cancel').addEventListener('click', () => {
+      linkDialog.style.display = 'none';
+    });
+
+    linkDialog.addEventListener('click', (e) => {
+      if (e.target === linkDialog) linkDialog.style.display = 'none';
+    });
+
+    document.getElementById('link-dialog-add').addEventListener('click', () => {
+      const url   = linkUrlInput.value.trim();
+      const label = linkLabelInput.value.trim();
+      if (!url) { linkUrlInput.focus(); return; }
+      linkDialog.style.display = 'none';
+      const fullUrl = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+      addLinkCard(fullUrl, label);
+    });
+
+    [linkUrlInput, linkLabelInput].forEach(el => {
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('link-dialog-add').click();
+        if (e.key === 'Escape') linkDialog.style.display = 'none';
+      });
+    });
 
     document.getElementById('btn-add-type').addEventListener('click', openAddDialog);
 

@@ -928,6 +928,37 @@
       transform: translateX(-50%) translateY(0);
     }
 
+    /* ── Live cursors ── */
+    .remote-cursor {
+      position: fixed;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      transition: transform 0.05s linear;
+      will-change: transform;
+    }
+
+    .remote-cursor svg {
+      display: block;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25));
+    }
+
+    .remote-cursor-label {
+      font-size: 11px;
+      font-family: "DM Mono", ui-monospace, monospace;
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: #fff;
+      white-space: nowrap;
+      margin-left: 10px;
+      opacity: 0.92;
+    }
+
   </style>
 </head>
 <body>
@@ -1101,6 +1132,7 @@
 
   <!-- hidden native color picker -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <input type="color" id="color-picker" style="position:fixed;opacity:0;width:0;height:0;top:0;left:0;" />
 
   <!-- toast -->
@@ -1894,6 +1926,101 @@
           }
         });
       }
+    });
+
+    // ── Live cursors (Supabase Broadcast) ──
+    const SUPABASE_URL  = 'https://wecheiqbtrrclwkvdgsv.supabase.co';
+    const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlY2hlaXFidHJyY2x3a3ZkZ3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyODAzNzIsImV4cCI6MjA5MDg1NjM3Mn0.CnnBauRJB86B2jLKRgytJbA7R0QsPtzKatNJXnw4iBk';
+    const CURSOR_ROOM   = 'moodboard-cursors';
+
+    const CURSOR_COLORS = [
+      '#FF6B6B','#FF9F43','#FECA57','#48DBFB',
+      '#1DD1A1','#A29BFE','#FD79A8','#6C5CE7',
+    ];
+
+    // Stable identity for this browser session
+    const myId = sessionStorage.getItem('mb-uid') || (() => {
+      const id = Math.random().toString(36).slice(2, 10);
+      sessionStorage.setItem('mb-uid', id);
+      return id;
+    })();
+
+    const myColor = CURSOR_COLORS[
+      [...myId].reduce((a, c) => a + c.charCodeAt(0), 0) % CURSOR_COLORS.length
+    ];
+
+    const myName = 'Visitor ' + myId.slice(0, 4).toUpperCase();
+
+    // Remote cursor elements keyed by user id
+    const remoteCursors = {};
+
+    function getOrCreateCursor(id, color, name) {
+      if (remoteCursors[id]) return remoteCursors[id];
+
+      const el = document.createElement('div');
+      el.className = 'remote-cursor';
+      el.innerHTML = `
+        <svg width="14" height="18" viewBox="0 0 14 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0.5 0.5V14.5L4 10.5L7 17L9.5 16L6.5 9.5H11.5L0.5 0.5Z"
+            fill="${color}" stroke="white" stroke-width="1" stroke-linejoin="round"/>
+        </svg>
+        <span class="remote-cursor-label" style="background:${color}">${name}</span>`;
+
+      document.body.appendChild(el);
+      remoteCursors[id] = { el, timer: null };
+      return remoteCursors[id];
+    }
+
+    function moveCursor(id, color, name, x, y) {
+      if (id === myId) return;
+      const cursor = getOrCreateCursor(id, color, name);
+      cursor.el.style.transform = `translate(${x}px, ${y}px)`;
+      cursor.el.style.opacity = '1';
+
+      clearTimeout(cursor.timer);
+      cursor.timer = setTimeout(() => {
+        cursor.el.style.opacity = '0';
+      }, 5000);
+    }
+
+    function removeCursor(id) {
+      const c = remoteCursors[id];
+      if (c) { c.el.remove(); delete remoteCursors[id]; }
+    }
+
+    // Connect to Supabase
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const cursorChannel = sb.channel(CURSOR_ROOM, {
+      config: { broadcast: { self: false, ack: false } },
+    });
+
+    cursorChannel
+      .on('broadcast', { event: 'move' }, ({ payload }) => {
+        moveCursor(payload.id, payload.color, payload.name, payload.x, payload.y);
+      })
+      .on('broadcast', { event: 'leave' }, ({ payload }) => {
+        removeCursor(payload.id);
+      })
+      .subscribe();
+
+    // Throttled mousemove broadcast
+    let lastSent = 0;
+    document.addEventListener('mousemove', (e) => {
+      const now = Date.now();
+      if (now - lastSent < 40) return; // ~25fps
+      lastSent = now;
+      cursorChannel.send({
+        type: 'broadcast', event: 'move',
+        payload: { id: myId, color: myColor, name: myName, x: e.clientX, y: e.clientY },
+      });
+    });
+
+    // Broadcast leave when tab closes
+    window.addEventListener('beforeunload', () => {
+      cursorChannel.send({
+        type: 'broadcast', event: 'leave',
+        payload: { id: myId },
+      });
     });
 
     initBoards();

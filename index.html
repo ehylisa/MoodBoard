@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MoodBoard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    button, input, select, textarea {
+      font-family: inherit;
+    }
+
+    body {
+      font-family: "DM Mono", ui-monospace, monospace;
+      background: #f5f4f0;
+      color: #1a1a1a;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 200px;
+      flex-shrink: 0;
+      background: #ffffff;
+      border-right: 1px solid #e8e6e0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 14px 14px 8px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #aaa;
+    }
+
+    .sidebar-boards {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 8px;
+    }
+
+    .sidebar-board {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #555;
+      font-size: 13px;
+      transition: background 0.12s;
+      position: relative;
+    }
+
+    .sidebar-board:hover {
+      background: #f5f4f0;
+    }
+
+    .sidebar-board.active {
+      background: #f0efeb;
+      color: #1a1a1a;
+      font-weight: 500;
+    }
+
+    .sidebar-board-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      outline: none;
+    }
+
+    .sidebar-board-name[contenteditable="true"] {
+      background: #fff;
+      border-radius: 3px;
+      padding: 0 3px;
+      margin: 0 -3px;
+      box-shadow: 0 0 0 2px #c5c2bb;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .sidebar-board-del {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #ccc;
+      font-size: 13px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      opacity: 0;
+      transition: opacity 0.12s, color 0.12s;
+      padding: 0;
+    }
+
+    .sidebar-board:hover .sidebar-board-del {
+      opacity: 1;
+    }
+
+    .sidebar-board-del:hover {
+      color: #c0392b;
+    }
+
+    .sidebar-footer {
+      padding: 8px;
+      border-top: 1px solid #e8e6e0;
+      flex-shrink: 0;
+    }
+
+    .sidebar-new-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 8px;
+      border: 1px dashed #d4d2cc;
+      border-radius: 6px;
+      background: none;
+      font-size: 12.5px;
+      color: #888;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+
+    .sidebar-new-btn:hover {
+      background: #f5f4f0;
+      color: #1a1a1a;
+      border-color: #aaa;
+    }
+
+    /* ── Main ── */
+    .main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      height: 48px;
+      background: #ffffff;
+      border-bottom: 1px solid #e8e6e0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .toolbar-title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #1a1a1a;
+      margin-right: auto;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #f5f4f0;
+      border: 1px solid #e4e2dc;
+      border-radius: 8px;
+      padding: 3px;
+    }
+
+    .toolbar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      font-size: 12.5px;
+      color: #555;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
+    }
+
+    .toolbar-btn:hover {
+      background: #ffffff;
+      color: #1a1a1a;
+    }
+
+    .toolbar-btn svg {
+      flex-shrink: 0;
+    }
+
+    .toolbar-divider {
+      width: 1px;
+      height: 20px;
+      background: #e4e2dc;
+      margin: 0 10px;
+    }
+
+    .toolbar-clear {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      font-size: 12.5px;
+      color: #999;
+      cursor: pointer;
+      transition: color 0.12s;
+    }
+
+    .toolbar-clear:hover {
+      color: #c0392b;
+    }
+
+    /* ── Board ── */
+    .board {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      position: relative;
+    }
+
+    .board-canvas {
+      position: relative;
+      width: 3200px;
+      height: 2400px;
+    }
+
+    .board-empty {
+      position: absolute;
+      top: 180px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #aaa;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .board-empty svg {
+      opacity: 0.4;
+    }
+
+    .board-empty p {
+      font-size: 14px;
+    }
+
+    /* ── Color card ── */
+    .color-card {
+      position: absolute;
+      width: 220px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: #fff;
+    }
+
+    .color-card-swatch {
+      width: 100%;
+      aspect-ratio: 1;
+      cursor: pointer;
+      transition: filter 0.15s;
+    }
+
+    .color-card-swatch:hover {
+      filter: brightness(0.95);
+    }
+
+    .color-card-swatch:hover::after {
+      content: 'Copy';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    .color-card-footer {
+      padding: 8px 10px;
+    }
+
+    .color-card-hex {
+      font-size: 12px;
+      font-family: ui-monospace, monospace;
+      color: #555;
+      letter-spacing: 0.02em;
+    }
+
+    @keyframes card-fade-out {
+      to { opacity: 0; transform: scale(0.96); }
+    }
+
+    .removing {
+      animation: card-fade-out 0.18s ease forwards;
+      pointer-events: none;
+    }
+
+    .card-delete {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+      color: #888;
+      font-size: 15px;
+      line-height: 1;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.12s, background 0.12s;
+      z-index: 1;
+    }
+
+    .card-delete:hover {
+      color: #c0392b;
+      background: #fff;
+    }
+
+    /* ── Image card ── */
+    .image-card {
+      position: absolute;
+      width: 220px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: #fff;
+    }
+
+    .image-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .image-card-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 160px;
+      padding: 24px;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .image-card-state svg {
+      opacity: 0.4;
+    }
+
+    .image-card-state.error {
+      color: #c0392b;
+      background: #fdf0ef;
+    }
+
+    .image-card-state.error svg {
+      opacity: 0.6;
+    }
+
+    .color-card:hover .card-delete,
+    .image-card:hover .card-delete,
+    .text-card:hover .card-delete {
+      opacity: 1;
+    }
+
+    /* ── Text card ── */
+    .text-card {
+      position: absolute;
+      width: 220px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: #fff;
+      padding: 24px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .text-card-sample {
+      line-height: 1.2;
+      word-break: break-word;
+    }
+
+    .text-card-sample.size-sm { font-size: 18px; }
+    .text-card-sample.size-md { font-size: 32px; }
+    .text-card-sample.size-lg { font-size: 52px; }
+
+    .text-card-footer {
+      margin-top: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-edit {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(4px);
+      cursor: pointer;
+      color: #888;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.12s, background 0.12s;
+      z-index: 1;
+    }
+
+    .text-card:hover .card-edit {
+      opacity: 1;
+    }
+
+    .card-edit:hover {
+      color: #1a1a1a;
+      background: #fff;
+    }
+
+    .text-card-label {
+      font-size: 11px;
+      color: #aaa;
+      font-family: ui-monospace, monospace;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Text dialog ── */
+    .dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      backdrop-filter: blur(2px);
+    }
+
+    .dialog {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+      padding: 24px;
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .dialog h2 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .dialog-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .dialog-field label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .dialog-field input,
+    .dialog-field select {
+      padding: 7px 10px;
+      border: 1px solid #e4e2dc;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #1a1a1a;
+      background: #fafaf8;
+      outline: none;
+      transition: border-color 0.12s;
+      font-family: inherit;
+    }
+
+    .dialog-field input:focus,
+    .dialog-field select:focus {
+      border-color: #aaa;
+      background: #fff;
+    }
+
+    .dialog-size-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dialog-size-group input[type="radio"] {
+      display: none;
+    }
+
+    .dialog-size-group label {
+      flex: 1;
+      text-align: center;
+      padding: 6px;
+      border: 1px solid #e4e2dc;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 400;
+    }
+
+    .dialog-size-group input[type="radio"]:checked + label {
+      background: #1a1a1a;
+      border-color: #1a1a1a;
+      color: #fff;
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .dialog-btn {
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid #e4e2dc;
+      background: #fff;
+      color: #555;
+      transition: background 0.12s;
+    }
+
+    .dialog-btn:hover { background: #f5f4f0; }
+
+    .dialog-btn.primary {
+      background: #1a1a1a;
+      border-color: #1a1a1a;
+      color: #fff;
+    }
+
+    .dialog-btn.primary:hover { background: #333; }
+
+    /* ── Drag ── */
+    .color-card,
+    .image-card,
+    .text-card {
+      cursor: grab;
+      transition: box-shadow 0.15s;
+      user-select: none;
+    }
+
+    .dragging {
+      cursor: grabbing;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.16);
+      z-index: 100;
+      transition: none; /* no transition while actively dragging */
+    }
+
+    /* ── Theme toggle button ── */
+    .theme-toggle {
+      position: fixed;
+      top: 60px;
+      right: 16px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid #e4e2dc;
+      background: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #888;
+      z-index: 50;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    .theme-toggle:hover {
+      background: #f5f4f0;
+      color: #1a1a1a;
+    }
+
+    .theme-toggle .icon-moon { display: block; }
+    .theme-toggle .icon-sun  { display: none; }
+
+    /* ── Dark mode ── */
+    html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+    html[data-theme="dark"] .theme-toggle .icon-sun  { display: block; }
+
+    html[data-theme="dark"] body {
+      background: #141414;
+      color: #e8e8e4;
+    }
+
+    html[data-theme="dark"] .sidebar {
+      background: #1e1e1e;
+      border-color: #2e2e2e;
+    }
+
+    html[data-theme="dark"] .sidebar-title { color: #555; }
+
+    html[data-theme="dark"] .sidebar-board { color: #999; }
+    html[data-theme="dark"] .sidebar-board:hover { background: #2a2a2a; }
+    html[data-theme="dark"] .sidebar-board.active { background: #2e2e2e; color: #e8e8e4; }
+
+    html[data-theme="dark"] .sidebar-board-name[contenteditable="true"] {
+      background: #333;
+      box-shadow: 0 0 0 2px #555;
+    }
+
+    html[data-theme="dark"] .sidebar-footer { border-color: #2e2e2e; }
+
+    html[data-theme="dark"] .sidebar-new-btn {
+      color: #666;
+      border-color: #333;
+    }
+
+    html[data-theme="dark"] .sidebar-new-btn:hover {
+      background: #2a2a2a;
+      color: #e8e8e4;
+      border-color: #555;
+    }
+
+    html[data-theme="dark"] .toolbar {
+      background: #1e1e1e;
+      border-color: #2e2e2e;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    html[data-theme="dark"] .toolbar-title { color: #e8e8e4; }
+
+    html[data-theme="dark"] .toolbar-actions {
+      background: #2a2a2a;
+      border-color: #3a3a3a;
+    }
+
+    html[data-theme="dark"] .toolbar-btn { color: #999; }
+    html[data-theme="dark"] .toolbar-btn:hover { background: #333; color: #e8e8e4; }
+
+    html[data-theme="dark"] .toolbar-divider { background: #2e2e2e; }
+    html[data-theme="dark"] .toolbar-clear { color: #555; }
+
+    html[data-theme="dark"] .theme-toggle {
+      background: #2a2a2a;
+      border-color: #3a3a3a;
+      color: #999;
+    }
+
+    html[data-theme="dark"] .theme-toggle:hover {
+      background: #333;
+      color: #e8e8e4;
+    }
+
+    html[data-theme="dark"] .board-empty { color: #444; }
+
+    html[data-theme="dark"] .color-card,
+    html[data-theme="dark"] .image-card,
+    html[data-theme="dark"] .text-card {
+      background: #242424;
+      border-color: rgba(255,255,255,0.07);
+    }
+
+    html[data-theme="dark"] .color-card-hex { color: #888; }
+
+    html[data-theme="dark"] .image-card-state { color: #555; }
+
+    html[data-theme="dark"] .text-card-sample { color: #e8e8e4; }
+    html[data-theme="dark"] .text-card-label  { color: #555; }
+
+    html[data-theme="dark"] .card-delete,
+    html[data-theme="dark"] .card-edit {
+      background: rgba(36,36,36,0.88);
+      color: #777;
+    }
+
+    html[data-theme="dark"] .card-delete:hover { color: #e05a5a; background: #2e2e2e; }
+    html[data-theme="dark"] .card-edit:hover   { color: #e8e8e4;  background: #2e2e2e; }
+
+    html[data-theme="dark"] .dialog {
+      background: #242424;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    html[data-theme="dark"] .dialog h2 { color: #e8e8e4; }
+
+    html[data-theme="dark"] .dialog-field label { color: #666; }
+
+    html[data-theme="dark"] .dialog-field input,
+    html[data-theme="dark"] .dialog-field select {
+      background: #1e1e1e;
+      border-color: #3a3a3a;
+      color: #e8e8e4;
+    }
+
+    html[data-theme="dark"] .dialog-field input:focus,
+    html[data-theme="dark"] .dialog-field select:focus {
+      border-color: #666;
+      background: #2a2a2a;
+    }
+
+    html[data-theme="dark"] .dialog-size-group label {
+      border-color: #3a3a3a;
+      color: #888;
+    }
+
+    html[data-theme="dark"] .dialog-size-group input[type="radio"]:checked + label {
+      background: #e8e8e4;
+      border-color: #e8e8e4;
+      color: #1a1a1a;
+    }
+
+    html[data-theme="dark"] .dialog-btn {
+      background: #2a2a2a;
+      border-color: #3a3a3a;
+      color: #999;
+    }
+
+    html[data-theme="dark"] .dialog-btn:hover { background: #333; }
+
+    html[data-theme="dark"] .dialog-btn.primary {
+      background: #e8e8e4;
+      border-color: #e8e8e4;
+      color: #1a1a1a;
+    }
+
+    html[data-theme="dark"] .dialog-btn.primary:hover { background: #fff; }
+
+    html[data-theme="dark"] .toast {
+      background: #e8e8e4;
+      color: #1a1a1a;
+    }
+
+    /* copied toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: #1a1a1a;
+      color: #fff;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s, transform 0.15s;
+      z-index: 100;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Boards</span>
+    </div>
+    <div class="sidebar-boards" id="sidebar-boards"></div>
+    <div class="sidebar-footer">
+      <button class="sidebar-new-btn" id="btn-new-board">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8">
+          <line x1="6" y1="1" x2="6" y2="11"/>
+          <line x1="1" y1="6" x2="11" y2="6"/>
+        </svg>
+        New Board
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Toolbar -->
+    <header class="toolbar">
+      <span class="toolbar-title" id="toolbar-board-name"></span>
+
+      <div class="toolbar-actions">
+        <button class="toolbar-btn" id="btn-add-colour">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="7" cy="7" r="5.5"/>
+            <line x1="7" y1="4" x2="7" y2="10"/>
+            <line x1="4" y1="7" x2="10" y2="7"/>
+          </svg>
+          Add Color
+        </button>
+        <button class="toolbar-btn" id="btn-add-image">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="1.5" y="2.5" width="11" height="9" rx="1.5"/>
+            <circle cx="4.5" cy="5.5" r="1"/>
+            <polyline points="1.5,10.5 4.5,7 7,9.5 9.5,6.5 12.5,10.5"/>
+          </svg>
+          Add Image
+        </button>
+        <button class="toolbar-btn" id="btn-add-type">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <line x1="2" y1="3" x2="12" y2="3"/>
+            <line x1="7" y1="3" x2="7" y2="11"/>
+          </svg>
+          Add Text
+        </button>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <button class="toolbar-clear" id="btn-clear">Clear</button>
+    </header>
+
+    <!-- Board -->
+    <main class="board" id="board">
+      <div class="board-canvas" id="board-grid">
+        <div class="board-empty" id="board-empty">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="4" y="4" width="32" height="32" rx="4"/>
+            <line x1="20" y1="13" x2="20" y2="27"/>
+            <line x1="13" y1="20" x2="27" y2="20"/>
+          </svg>
+          <p>Add a colour, image, or type sample to get started.</p>
+        </div>
+      </div>
+    </main>
+
+  </div><!-- /.main -->
+</div><!-- /.app -->
+
+  <!-- Text dialog -->
+  <div class="dialog-backdrop" id="text-dialog" style="display:none" role="dialog" aria-modal="true">
+    <div class="dialog">
+      <h2 id="text-dialog-title">Add Text Sample</h2>
+
+      <div class="dialog-field">
+        <label for="text-input">Sample text</label>
+        <input id="text-input" type="text" value="The quick brown fox" />
+      </div>
+
+      <div class="dialog-field">
+        <label for="font-input">Font</label>
+        <input id="font-input" type="text" list="font-suggestions" placeholder="e.g. Playfair Display" />
+        <datalist id="font-suggestions">
+          <option value="Inter">
+          <option value="Playfair Display">
+          <option value="Lora">
+          <option value="DM Sans">
+          <option value="Space Grotesk">
+          <option value="Fraunces">
+          <option value="Libre Baskerville">
+          <option value="Outfit">
+        </datalist>
+      </div>
+
+      <div class="dialog-field">
+        <label>Size</label>
+        <div class="dialog-size-group">
+          <input type="radio" name="text-size" id="size-sm" value="sm">
+          <label for="size-sm">Small</label>
+          <input type="radio" name="text-size" id="size-md" value="md" checked>
+          <label for="size-md">Medium</label>
+          <input type="radio" name="text-size" id="size-lg" value="lg">
+          <label for="size-lg">Large</label>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn" id="text-dialog-cancel">Cancel</button>
+        <button class="dialog-btn primary" id="text-dialog-add">Add</button>
+        <button class="dialog-btn primary" id="text-dialog-save" style="display:none">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme toggle -->
+  <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode">
+    <svg class="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+    </svg>
+    <svg class="icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  </button>
+
+  <!-- hidden native color picker -->
+  <input type="color" id="color-picker" style="position:fixed;opacity:0;width:0;height:0;top:0;left:0;" />
+
+  <!-- toast -->
+  <div class="toast" id="toast">Copied!</div>
+
+  <script>
+    const grid = document.getElementById('board-grid');
+    const empty = document.getElementById('board-empty');
+    const colorPicker = document.getElementById('color-picker');
+    const toast = document.getElementById('toast');
+    const sidebarBoards = document.getElementById('sidebar-boards');
+    const toolbarBoardName = document.getElementById('toolbar-board-name');
+
+    function hideEmpty() { empty.style.display = 'none'; }
+    function showEmpty() {
+      if (grid.querySelectorAll(':scope > :not(#board-empty)').length === 0) {
+        empty.style.display = '';
+      }
+    }
+
+    function removeCard(card) {
+      card.classList.add('removing');
+      card.addEventListener('animationend', () => { card.remove(); showEmpty(); saveBoard(); }, { once: true });
+    }
+
+    // ── Persistence: multi-board ──
+    const STORAGE_KEY = 'moodboard-boards-v1';
+    let activeId = null;
+
+    function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+    function getAllBoards() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+    }
+
+    function setAllBoards(boards) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(boards));
+    }
+
+    function currentItemsFromDOM() {
+      return cards().map(card => {
+        const x = parseFloat(card.style.left) || 0;
+        const y = parseFloat(card.style.top)  || 0;
+        if (card.classList.contains('color-card')) return { type: 'color', hex: card.dataset.hex, x, y };
+        if (card.classList.contains('image-card')) return { type: 'image', url: card.dataset.url, x, y };
+        if (card.classList.contains('text-card')) return { type: 'text', text: card.dataset.text, font: card.dataset.font, size: card.dataset.size, x, y };
+        return null;
+      }).filter(Boolean);
+    }
+
+    function saveBoard() {
+      if (!activeId) return;
+      const boards = getAllBoards();
+      const board = boards.find(b => b.id === activeId);
+      if (board) board.items = currentItemsFromDOM();
+      setAllBoards(boards);
+    }
+
+    function clearGrid() {
+      [...grid.children].forEach(el => { if (el !== empty) el.remove(); });
+      empty.style.display = '';
+    }
+
+    async function renderBoardItems(items) {
+      clearGrid();
+      for (const item of (items || [])) {
+        const pos = { x: item.x, y: item.y };
+        if (item.type === 'color' && item.hex) {
+          addColorCard(item.hex, { save: false, ...pos });
+        } else if (item.type === 'image' && item.url) {
+          addImageCard(item.url, { save: false, ...pos });
+        } else if (item.type === 'text' && item.text) {
+          await loadGoogleFont(item.font);
+          addTextCard({ text: item.text, font: item.font || '', size: item.size || 'md' }, { save: false, ...pos });
+        }
+      }
+    }
+
+    function switchBoard(id) {
+      saveBoard(); // save current before switching
+      activeId = id;
+      const boards = getAllBoards();
+      const board = boards.find(b => b.id === id);
+      if (!board) return;
+      toolbarBoardName.textContent = board.name;
+      renderBoardItems(board.items);
+      renderSidebar();
+    }
+
+    function createBoard(name) {
+      saveBoard();
+      const board = { id: uid(), name: name || 'Untitled', items: [] };
+      const boards = getAllBoards();
+      boards.push(board);
+      setAllBoards(boards);
+      activeId = board.id;
+      clearGrid();
+      toolbarBoardName.textContent = board.name;
+      renderSidebar();
+    }
+
+    function renameBoard(id, name) {
+      const boards = getAllBoards();
+      const board = boards.find(b => b.id === id);
+      if (board) { board.name = name || 'Untitled'; setAllBoards(boards); }
+      if (id === activeId) toolbarBoardName.textContent = board.name;
+    }
+
+    function deleteBoard(id) {
+      let boards = getAllBoards();
+      boards = boards.filter(b => b.id !== id);
+      if (boards.length === 0) {
+        boards.push({ id: uid(), name: 'My Board', items: [] });
+      }
+      setAllBoards(boards);
+      if (id === activeId) {
+        switchBoard(boards[0].id);
+      } else {
+        renderSidebar();
+      }
+    }
+
+    function renderSidebar() {
+      const boards = getAllBoards();
+      sidebarBoards.innerHTML = '';
+      boards.forEach(board => {
+        const item = document.createElement('div');
+        item.className = 'sidebar-board' + (board.id === activeId ? ' active' : '');
+        item.dataset.id = board.id;
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'sidebar-board-name';
+        nameEl.textContent = board.name;
+
+        // Double-click to rename
+        nameEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          nameEl.contentEditable = 'true';
+          nameEl.focus();
+          // Select all text
+          const range = document.createRange();
+          range.selectNodeContents(nameEl);
+          window.getSelection().removeAllRanges();
+          window.getSelection().addRange(range);
+        });
+
+        nameEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+          if (e.key === 'Escape') { nameEl.textContent = board.name; nameEl.blur(); }
+        });
+
+        nameEl.addEventListener('blur', () => {
+          nameEl.contentEditable = 'false';
+          const newName = nameEl.textContent.trim() || board.name;
+          nameEl.textContent = newName;
+          renameBoard(board.id, newName);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'sidebar-board-del';
+        delBtn.title = 'Delete board';
+        delBtn.textContent = '×';
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteBoard(board.id);
+        });
+
+        item.append(nameEl, delBtn);
+        item.addEventListener('click', () => {
+          if (board.id !== activeId) switchBoard(board.id);
+        });
+
+        sidebarBoards.appendChild(item);
+      });
+    }
+
+    function initBoards() {
+      let boards = getAllBoards();
+
+      // Migrate legacy single-board data
+      const legacy = localStorage.getItem('moodboard-v1');
+      if (legacy && boards.length === 0) {
+        try {
+          const items = JSON.parse(legacy);
+          if (Array.isArray(items) && items.length > 0) {
+            boards = [{ id: uid(), name: 'My Board', items }];
+            setAllBoards(boards);
+            localStorage.removeItem('moodboard-v1');
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (boards.length === 0) {
+        boards = [{ id: uid(), name: 'My Board', items: [] }];
+        setAllBoards(boards);
+      }
+
+      activeId = boards[0].id;
+      toolbarBoardName.textContent = boards[0].name;
+      renderSidebar();
+      renderBoardItems(boards[0].items);
+    }
+
+    document.getElementById('btn-new-board').addEventListener('click', () => {
+      createBoard('Untitled');
+    });
+
+    // ── Free-form drag (pointer events) ──
+    function cards() {
+      return [...grid.querySelectorAll('.color-card, .image-card, .text-card')];
+    }
+
+    function getDefaultPosition() {
+      const boardEl = document.getElementById('board');
+      const count = cards().length;
+      const cascade = (count % 10) * 24;
+      return {
+        x: boardEl.scrollLeft + 32 + cascade,
+        y: boardEl.scrollTop  + 32 + cascade
+      };
+    }
+
+    function makeDraggable(card) {
+      card.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.card-delete, .card-edit')) return;
+        if (e.button !== 0) return;
+        e.preventDefault();
+
+        card.setPointerCapture(e.pointerId);
+
+        const startPX = e.clientX;
+        const startPY = e.clientY;
+        const origLeft = parseFloat(card.style.left) || 0;
+        const origTop  = parseFloat(card.style.top)  || 0;
+
+        card.classList.add('dragging');
+
+        function onMove(e) {
+          card.style.left = Math.max(0, origLeft + e.clientX - startPX) + 'px';
+          card.style.top  = Math.max(0, origTop  + e.clientY - startPY) + 'px';
+        }
+
+        function onUp() {
+          card.classList.remove('dragging');
+          card.removeEventListener('pointermove', onMove);
+          card.removeEventListener('pointerup', onUp);
+          saveBoard();
+        }
+
+        card.addEventListener('pointermove', onMove);
+        card.addEventListener('pointerup', onUp);
+      });
+    }
+
+    let toastTimer;
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    function addColorCard(hex, { save = true, x, y } = {}) {
+      hideEmpty();
+
+      const card = document.createElement('div');
+      card.className = 'color-card';
+      card.dataset.hex = hex;
+      const pos = (x != null && y != null) ? { x, y } : getDefaultPosition();
+      card.style.left = pos.x + 'px';
+      card.style.top  = pos.y + 'px';
+
+      const swatch = document.createElement('div');
+      swatch.className = 'color-card-swatch';
+      swatch.style.background = hex;
+      swatch.title = 'Click to copy hex';
+      swatch.addEventListener('click', () => {
+        navigator.clipboard.writeText(hex).then(() => showToast(`Copied ${hex}`));
+      });
+
+      const footer = document.createElement('div');
+      footer.className = 'color-card-footer';
+
+      const label = document.createElement('span');
+      label.className = 'color-card-hex';
+      label.textContent = hex;
+
+      const del = document.createElement('button');
+      del.className = 'card-delete';
+      del.title = 'Remove';
+      del.textContent = '×';
+      del.addEventListener('click', () => removeCard(card));
+
+      footer.append(label);
+      card.append(swatch, footer, del);
+      makeDraggable(card);
+      grid.appendChild(card);
+      if (save) saveBoard();
+    }
+
+    document.getElementById('btn-add-colour').addEventListener('click', () => {
+      colorPicker.value = '#' + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
+      colorPicker.click();
+    });
+
+    colorPicker.addEventListener('change', () => {
+      addColorCard(colorPicker.value.toUpperCase());
+    });
+
+    function addImageCard(url, { save = true, x, y } = {}) {
+      hideEmpty();
+
+      const card = document.createElement('div');
+      card.className = 'image-card';
+      card.dataset.url = url;
+      const pos = (x != null && y != null) ? { x, y } : getDefaultPosition();
+      card.style.left = pos.x + 'px';
+      card.style.top  = pos.y + 'px';
+
+      // Loading state
+      const loading = document.createElement('div');
+      loading.className = 'image-card-state';
+      loading.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="3"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <polyline points="3,17 8,12 11,15 15,10 21,17"/>
+        </svg>
+        <span>Loading…</span>`;
+      card.appendChild(loading);
+
+      const del = document.createElement('button');
+      del.className = 'card-delete';
+      del.title = 'Remove';
+      del.textContent = '×';
+      del.addEventListener('click', () => removeCard(card));
+      card.appendChild(del);
+      makeDraggable(card);
+      grid.appendChild(card);
+
+      // Load image
+      const img = new Image();
+      img.alt = '';
+
+      img.onload = () => {
+        loading.remove();
+        card.insertBefore(img, del);
+        if (save) saveBoard();
+      };
+
+      img.onerror = () => {
+        loading.className = 'image-card-state error';
+        loading.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="9"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <circle cx="12" cy="16" r="0.5" fill="currentColor"/>
+          </svg>
+          <span>Couldn't load image</span>`;
+      };
+
+      img.src = url;
+    }
+
+    document.getElementById('btn-add-image').addEventListener('click', () => {
+      const url = prompt('Image URL:');
+      if (url && url.trim()) addImageCard(url.trim());
+    });
+
+    // Text dialog
+    const textDialog      = document.getElementById('text-dialog');
+    const textDialogTitle = document.getElementById('text-dialog-title');
+    const textInput       = document.getElementById('text-input');
+    const fontInput       = document.getElementById('font-input');
+    const addBtn          = document.getElementById('text-dialog-add');
+    const saveBtn         = document.getElementById('text-dialog-save');
+    let editingCard = null;
+
+    function openAddDialog() {
+      editingCard = null;
+      textDialogTitle.textContent = 'Add Text Sample';
+      textInput.value = 'The quick brown fox';
+      fontInput.value = '';
+      document.getElementById('size-md').checked = true;
+      addBtn.style.display = '';
+      saveBtn.style.display = 'none';
+      textDialog.style.display = 'flex';
+      setTimeout(() => textInput.focus(), 50);
+    }
+
+    function openEditDialog(card) {
+      editingCard = card;
+      textDialogTitle.textContent = 'Edit Text Sample';
+      textInput.value = card.dataset.text || '';
+      fontInput.value = card.dataset.font || '';
+      const size = card.dataset.size || 'md';
+      document.getElementById(`size-${size}`).checked = true;
+      addBtn.style.display = 'none';
+      saveBtn.style.display = '';
+      textDialog.style.display = 'flex';
+      setTimeout(() => textInput.focus(), 50);
+    }
+
+    function loadGoogleFont(family) {
+      if (!family) return Promise.resolve();
+      // Only load if not already loaded
+      const id = 'gf-' + family.replace(/\s+/g, '-');
+      if (document.getElementById(id)) return Promise.resolve();
+      return new Promise((resolve) => {
+        const link = document.createElement('link');
+        link.id = id;
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}&display=swap`;
+        link.onload = resolve;
+        link.onerror = resolve; // resolve anyway; card will fall back to system font
+        document.head.appendChild(link);
+      });
+    }
+
+    function addTextCard({ text, font, size }, { save = true, x, y } = {}) {
+      hideEmpty();
+
+      const card = document.createElement('div');
+      card.className = 'text-card';
+      card.dataset.text = text;
+      card.dataset.font = font;
+      card.dataset.size = size;
+      const pos = (x != null && y != null) ? { x, y } : getDefaultPosition();
+      card.style.left = pos.x + 'px';
+      card.style.top  = pos.y + 'px';
+
+      const sample = document.createElement('div');
+      sample.className = `text-card-sample size-${size}`;
+      sample.textContent = text;
+      if (font) sample.style.fontFamily = `"${font}", serif`;
+
+      const footer = document.createElement('div');
+      footer.className = 'text-card-footer';
+
+      const label = document.createElement('span');
+      label.className = 'text-card-label';
+      label.textContent = font || 'System font';
+
+      const del = document.createElement('button');
+      del.className = 'card-delete';
+      del.title = 'Remove';
+      del.textContent = '×';
+      del.addEventListener('click', () => removeCard(card));
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'card-edit';
+      editBtn.title = 'Edit';
+      editBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5l2 2L4 10H2v-2L8.5 1.5z"/></svg>`;
+      editBtn.addEventListener('click', () => openEditDialog(card));
+
+      footer.append(label);
+      card.append(sample, footer, del, editBtn);
+      makeDraggable(card);
+      grid.appendChild(card);
+      if (save) saveBoard();
+    }
+
+    document.getElementById('btn-add-type').addEventListener('click', openAddDialog);
+
+    document.getElementById('text-dialog-cancel').addEventListener('click', () => {
+      textDialog.style.display = 'none';
+    });
+
+    textDialog.addEventListener('click', (e) => {
+      if (e.target === textDialog) textDialog.style.display = 'none';
+    });
+
+    addBtn.addEventListener('click', async () => {
+      const text = textInput.value.trim() || 'The quick brown fox';
+      const font = fontInput.value.trim();
+      const size = document.querySelector('input[name="text-size"]:checked').value;
+      textDialog.style.display = 'none';
+      await loadGoogleFont(font);
+      addTextCard({ text, font, size });
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      if (!editingCard) return;
+      const text = textInput.value.trim() || 'The quick brown fox';
+      const font = fontInput.value.trim();
+      const size = document.querySelector('input[name="text-size"]:checked').value;
+      textDialog.style.display = 'none';
+      await loadGoogleFont(font);
+
+      // Update card data
+      editingCard.dataset.text = text;
+      editingCard.dataset.font = font;
+      editingCard.dataset.size = size;
+
+      // Update sample
+      const sample = editingCard.querySelector('.text-card-sample');
+      sample.textContent = text;
+      sample.className = `text-card-sample size-${size}`;
+      sample.style.fontFamily = font ? `"${font}", serif` : '';
+
+      // Update label
+      editingCard.querySelector('.text-card-label').textContent = font || 'System font';
+
+      editingCard = null;
+      saveBoard();
+    });
+
+    // Submit on Enter in inputs
+    [textInput, fontInput].forEach(el => {
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') (editingCard ? saveBtn : addBtn).click();
+        if (e.key === 'Escape') textDialog.style.display = 'none';
+      });
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      clearGrid();
+      saveBoard();
+    });
+
+    // ── Theme ──
+    const themeToggle = document.getElementById('theme-toggle');
+
+    function applyTheme(dark) {
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      localStorage.setItem('moodboard-theme', dark ? 'dark' : 'light');
+    }
+
+    themeToggle.addEventListener('click', () => {
+      applyTheme(document.documentElement.getAttribute('data-theme') !== 'dark');
+    });
+
+    // Restore saved theme (fall back to system preference)
+    const savedTheme = localStorage.getItem('moodboard-theme');
+    if (savedTheme) {
+      applyTheme(savedTheme === 'dark');
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      applyTheme(true);
+    }
+
+    initBoards();
+  </script>
+
+</body>
+</html>

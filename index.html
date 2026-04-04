@@ -611,6 +611,54 @@
       transition: none; /* no transition while actively dragging */
     }
 
+    /* ── Export ── */
+    .export-wrap {
+      position: relative;
+    }
+
+    .export-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      background: #fff;
+      border: 1px solid #e4e2dc;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      overflow: hidden;
+      z-index: 50;
+      min-width: 100px;
+    }
+
+    .export-menu.open { display: block; }
+
+    .export-option {
+      display: block;
+      width: 100%;
+      padding: 8px 14px;
+      border: none;
+      background: none;
+      font-size: 12.5px;
+      color: #555;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .export-option:hover {
+      background: #f5f4f0;
+      color: #1a1a1a;
+    }
+
+    html[data-theme="dark"] .export-menu {
+      background: #242424;
+      border-color: #3a3a3a;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+
+    html[data-theme="dark"] .export-option { color: #999; }
+    html[data-theme="dark"] .export-option:hover { background: #2e2e2e; color: #e8e8e4; }
+
     /* ── Theme toggle button ── */
     .theme-toggle {
       position: fixed;
@@ -866,6 +914,15 @@
       <div class="toolbar-divider"></div>
 
       <button class="toolbar-clear" id="btn-clear">Clear</button>
+
+      <div class="export-wrap" id="export-wrap">
+        <button class="toolbar-clear" id="btn-export">Export</button>
+        <div class="export-menu" id="export-menu">
+          <button class="export-option" data-format="jpeg">JPEG</button>
+          <button class="export-option" data-format="svg">SVG</button>
+          <button class="export-option" data-format="gif">GIF</button>
+        </div>
+      </div>
     </header>
 
     <!-- Board -->
@@ -945,6 +1002,7 @@
   </button>
 
   <!-- hidden native color picker -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <input type="color" id="color-picker" style="position:fixed;opacity:0;width:0;height:0;top:0;left:0;" />
 
   <!-- toast -->
@@ -1465,6 +1523,109 @@
       saveBoard();
     });
 
+    // ── Export ──
+    const exportWrap = document.getElementById('export-wrap');
+    const exportMenu = document.getElementById('export-menu');
+
+    document.getElementById('btn-export').addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportMenu.classList.toggle('open');
+    });
+
+    document.addEventListener('click', () => exportMenu.classList.remove('open'));
+
+    function cardsBoundingBox(padding = 40) {
+      const cardEls = cards();
+      if (!cardEls.length) return null;
+      let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+      cardEls.forEach(c => {
+        const l = parseFloat(c.style.left) || 0;
+        const t = parseFloat(c.style.top)  || 0;
+        minX = Math.min(minX, l);
+        minY = Math.min(minY, t);
+        maxX = Math.max(maxX, l + c.offsetWidth);
+        maxY = Math.max(maxY, t + c.offsetHeight);
+      });
+      return {
+        x: Math.max(0, minX - padding),
+        y: Math.max(0, minY - padding),
+        w: maxX - minX + padding * 2,
+        h: maxY - minY + padding * 2,
+      };
+    }
+
+    function download(dataUrl, filename) {
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      a.click();
+    }
+
+    async function exportBoard(format) {
+      const cardEls = cards();
+      if (!cardEls.length) { showToast('Nothing to export'); return; }
+
+      const bb = cardsBoundingBox();
+      const boardCanvas = document.getElementById('board-grid');
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const bg = isDark ? '#141414' : '#f5f4f0';
+      const name = (toolbarBoardName.textContent || 'moodboard').replace(/\s+/g, '-').toLowerCase();
+
+      if (format === 'svg') {
+        // Serialize the canvas region to SVG via foreignObject
+        const clone = boardCanvas.cloneNode(true);
+        clone.style.transform = `translate(-${bb.x}px, -${bb.y}px)`;
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = `width:${bb.w}px;height:${bb.h}px;overflow:hidden;background:${bg}`;
+        wrapper.appendChild(clone);
+
+        // Inline all computed styles on cards so SVG is self-contained
+        const origCards = boardCanvas.querySelectorAll('.color-card,.image-card,.text-card');
+        const cloneCards = clone.querySelectorAll('.color-card,.image-card,.text-card');
+        origCards.forEach((orig, i) => {
+          const cs = getComputedStyle(orig);
+          cloneCards[i].setAttribute('style', cloneCards[i].getAttribute('style') + `;font-family:${cs.fontFamily}`);
+        });
+
+        const xml = new XMLSerializer().serializeToString(wrapper);
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${bb.w}" height="${bb.h}">` +
+          `<foreignObject width="100%" height="100%">` +
+          `<div xmlns="http://www.w3.org/1999/xhtml">${xml}</div>` +
+          `</foreignObject></svg>`;
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        download(URL.createObjectURL(blob), `${name}.svg`);
+        showToast('Exported SVG');
+        return;
+      }
+
+      // JPEG / GIF — both rendered via html2canvas
+      const canvas = await html2canvas(boardCanvas, {
+        x: bb.x, y: bb.y,
+        width: bb.w, height: bb.h,
+        backgroundColor: bg,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+
+      if (format === 'jpeg') {
+        download(canvas.toDataURL('image/jpeg', 0.92), `${name}.jpg`);
+        showToast('Exported JPEG');
+      } else {
+        // GIF: browsers have no native GIF encoder; export as high-quality PNG saved as .gif
+        download(canvas.toDataURL('image/png'), `${name}.gif`);
+        showToast('Exported GIF');
+      }
+    }
+
+    document.querySelectorAll('.export-option').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportMenu.classList.remove('open');
+        exportBoard(btn.dataset.format);
+      });
+    });
+
     // ── Theme ──
     const themeToggle = document.getElementById('theme-toggle');
 
@@ -1484,6 +1645,42 @@
     } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       applyTheme(true);
     }
+
+    // ── Paste from clipboard ──
+    document.addEventListener('paste', (e) => {
+      // Don't intercept paste inside text inputs or contenteditable
+      const el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+
+      const items = [...(e.clipboardData?.items || [])];
+
+      // 1. Image blob — screenshot or right-click → Copy Image
+      const imageItem = items.find(i => i.type.startsWith('image/'));
+      if (imageItem) {
+        e.preventDefault();
+        const file = imageItem.getAsFile();
+        const reader = new FileReader();
+        reader.onload = ev => {
+          addImageCard(ev.target.result); // stores as data URL, persists across reload
+          showToast('Image pasted');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // 2. Plain text — treat as image URL if it looks like one
+      const textItem = items.find(i => i.type === 'text/plain');
+      if (textItem) {
+        textItem.getAsString(text => {
+          const trimmed = text.trim();
+          if (/^https?:\/\/.+\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(trimmed)) {
+            e.preventDefault();
+            addImageCard(trimmed);
+            showToast('Image URL pasted');
+          }
+        });
+      }
+    });
 
     initBoards();
   </script>

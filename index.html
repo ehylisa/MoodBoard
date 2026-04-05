@@ -928,6 +928,55 @@
       transform: translateX(-50%) translateY(0);
     }
 
+    /* ── Chat ── */
+    .chat-input-wrap {
+      position: fixed;
+      z-index: 10000;
+      pointer-events: all;
+    }
+
+    .chat-input {
+      background: rgba(255,255,255,0.95);
+      border: 1.5px solid #e4e2dc;
+      border-radius: 20px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-family: "DM Mono", ui-monospace, monospace;
+      color: #1a1a1a;
+      outline: none;
+      min-width: 60px;
+      max-width: 220px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+      backdrop-filter: blur(4px);
+      caret-color: #555;
+    }
+
+    html[data-theme="dark"] .chat-input {
+      background: rgba(36,36,36,0.95);
+      border-color: #3a3a3a;
+      color: #e8e8e4;
+    }
+
+    .chat-message-line {
+      position: fixed;
+      z-index: 9998;
+      font-size: 13px;
+      font-family: "DM Mono", ui-monospace, monospace;
+      background: rgba(26,26,26,0.82);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 12px;
+      white-space: nowrap;
+      pointer-events: none;
+      animation: chat-line-out 3s ease forwards;
+    }
+
+    @keyframes chat-line-out {
+      0%   { opacity: 1;   transform: translateY(0); }
+      60%  { opacity: 1;   transform: translateY(-16px); }
+      100% { opacity: 0;   transform: translateY(-28px); }
+    }
+
     /* ── Live cursors ── */
     .remote-cursor {
       position: fixed;
@@ -2024,6 +2073,115 @@
     });
 
     initBoards();
+
+    // ── Chat ──
+    const CHAT_ROOM = 'moodboard-chat';
+    const chatChannel = sb.channel(CHAT_ROOM, {
+      config: { broadcast: { self: false, ack: false } },
+    });
+
+    chatChannel
+      .on('broadcast', { event: 'chat' }, ({ payload }) => {
+        showChatLine(payload.text, payload.x, payload.y, payload.color);
+      })
+      .subscribe();
+
+    let chatX = window.innerWidth / 2;
+    let chatY = window.innerHeight / 2;
+
+    document.addEventListener('mousemove', (e) => {
+      chatX = e.clientX;
+      chatY = e.clientY;
+    });
+
+    let chatWrap = null;
+    let chatInput = null;
+
+    function openChat() {
+      if (chatWrap) return;
+
+      chatWrap = document.createElement('div');
+      chatWrap.className = 'chat-input-wrap';
+      positionChatWrap();
+      document.body.appendChild(chatWrap);
+
+      chatInput = document.createElement('input');
+      chatInput.className = 'chat-input';
+      chatInput.type = 'text';
+      chatInput.maxLength = 30;
+      chatInput.placeholder = 'Say something…';
+      chatWrap.appendChild(chatInput);
+
+      chatInput.focus();
+
+      chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeChat();
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const text = chatInput.value.trim();
+          if (text) {
+            showChatLine(text, chatX, chatY, myColor);
+            chatChannel.send({
+              type: 'broadcast', event: 'chat',
+              payload: { text, x: chatX, y: chatY, color: myColor },
+            });
+            chatInput.value = '';
+            positionChatWrap();
+          }
+          return;
+        }
+      });
+
+      chatInput.addEventListener('blur', () => {
+        // small delay so clicks on the input itself don't close it
+        setTimeout(() => {
+          if (chatInput && document.activeElement !== chatInput) closeChat();
+        }, 150);
+      });
+    }
+
+    function positionChatWrap() {
+      if (!chatWrap) return;
+      const padding = 12;
+      const approxW = 180;
+      const approxH = 36;
+      let x = chatX + 18;
+      let y = chatY + 18;
+      if (x + approxW > window.innerWidth - padding) x = chatX - approxW - 10;
+      if (y + approxH > window.innerHeight - padding) y = chatY - approxH - 10;
+      chatWrap.style.left = x + 'px';
+      chatWrap.style.top  = y + 'px';
+    }
+
+    function closeChat() {
+      if (chatWrap) { chatWrap.remove(); chatWrap = null; chatInput = null; }
+    }
+
+    function showChatLine(text, x, y, color) {
+      const el = document.createElement('div');
+      el.className = 'chat-message-line';
+      el.textContent = text;
+      el.style.left = (x + 18) + 'px';
+      el.style.top  = (y - 10) + 'px';
+      el.style.background = color ? color + 'cc' : 'rgba(26,26,26,0.82)';
+      document.body.appendChild(el);
+      el.addEventListener('animationend', () => el.remove(), { once: true });
+    }
+
+    // Press / to open chat (ignore if focus is inside an input/textarea/contenteditable)
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== '/') return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      const editable = document.activeElement?.isContentEditable;
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable) return;
+      if (chatWrap) return; // already open
+      e.preventDefault();
+      openChat();
+    });
+
   </script>
 
 </body>

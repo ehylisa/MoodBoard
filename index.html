@@ -1303,6 +1303,9 @@
       return id;
     })();
 
+    const ADMIN_ID = 'ln2shqc2qx';
+    const isAdmin  = myOwnerId === ADMIN_ID;
+
     // Public boards fetched from Supabase (not owned by me)
     let remoteBoards = [];
 
@@ -1363,6 +1366,20 @@
 
     async function removeFromSupabase(id) {
       try { await sb.from(BOARDS_TABLE).delete().eq('id', id); } catch (e) { console.warn(e); }
+    }
+
+    async function deleteRemoteBoard(id) {
+      await removeFromSupabase(id);
+      remoteBoards = remoteBoards.filter(b => b.id !== id);
+      if (id === activeId) {
+        const myBoards = getAllBoards();
+        activeId = myBoards[0].id;
+        setReadOnly(false);
+        toolbarBoardName.textContent = myBoards[0].name;
+        renderBoardItems(myBoards[0].items);
+      }
+      renderSidebar();
+      showToast('Board removed');
     }
 
     async function fetchPublicBoards() {
@@ -1539,6 +1556,18 @@
         globeEl.style.pointerEvents = 'none';
         globeEl.innerHTML = SVG_GLOBE;
         item.append(nameEl, globeEl);
+
+        if (isAdmin) {
+          const delBtn = document.createElement('button');
+          delBtn.className = 'sidebar-board-del';
+          delBtn.title = 'Remove board (admin)';
+          delBtn.textContent = '×';
+          delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteRemoteBoard(board.id);
+          });
+          item.appendChild(delBtn);
+        }
       }
 
       item.addEventListener('click', () => {

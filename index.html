@@ -928,6 +928,78 @@
       transform: translateX(-50%) translateY(0);
     }
 
+    /* ── Visibility toggle ── */
+    .sidebar-vis-btn {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      padding: 0;
+      opacity: 0;
+      transition: opacity 0.12s, color 0.12s;
+    }
+
+    .sidebar-board:hover .sidebar-vis-btn { opacity: 1; }
+
+    .sidebar-vis-btn.public {
+      color: #3b82f6;
+      opacity: 1;
+    }
+
+    .sidebar-vis-btn:hover { color: #1a1a1a; }
+
+    .sidebar-section-label {
+      padding: 10px 10px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #bbb;
+      flex-shrink: 0;
+    }
+
+    .sidebar-board.remote .sidebar-board-name {
+      color: #888;
+    }
+
+    .sidebar-board.remote { font-style: italic; }
+
+    /* ── Read-only badge ── */
+    .read-only-badge {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #aaa;
+      padding: 3px 9px;
+      border: 1px solid #e4e2dc;
+      border-radius: 12px;
+      margin-right: 8px;
+      background: #fafaf8;
+    }
+
+    body.read-only .read-only-badge { display: flex; }
+
+    body.read-only .toolbar-actions { opacity: 0.4; pointer-events: none; }
+    body.read-only .toolbar-clear   { opacity: 0.4; pointer-events: none; }
+
+    html[data-theme="dark"] .read-only-badge {
+      background: #2a2a2a;
+      border-color: #3a3a3a;
+      color: #666;
+    }
+
+    html[data-theme="dark"] .sidebar-section-label { color: #444; }
+    html[data-theme="dark"] .sidebar-vis-btn.public { color: #60a5fa; }
+    html[data-theme="dark"] .sidebar-vis-btn:hover  { color: #e8e8e4; }
+
     /* ── Chat ── */
     .chat-input-wrap {
       position: fixed;
@@ -1036,6 +1108,14 @@
     <!-- Toolbar -->
     <header class="toolbar">
       <span class="toolbar-title" id="toolbar-board-name"></span>
+
+      <div class="read-only-badge" id="read-only-badge">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="2" y="5" width="8" height="6" rx="1.5"/>
+          <path d="M4 5V3.5a2 2 0 1 1 4 0V5"/>
+        </svg>
+        View only
+      </div>
 
       <div class="toolbar-actions">
         <button class="toolbar-btn" id="btn-add-colour">
@@ -1203,6 +1283,7 @@
     }
 
     function removeCard(card) {
+      if (readOnly) return;
       card.classList.add('removing');
       card.addEventListener('animationend', () => { card.remove(); showEmpty(); saveBoard(); }, { once: true });
     }
@@ -1210,6 +1291,24 @@
     // ── Persistence: multi-board ──
     const STORAGE_KEY = 'moodboard-boards-v1';
     let activeId = null;
+
+    // Stable owner identity persisted across sessions
+    const myOwnerId = localStorage.getItem('mb-owner-id') || (() => {
+      const id = Math.random().toString(36).slice(2, 12);
+      localStorage.setItem('mb-owner-id', id);
+      return id;
+    })();
+
+    // Public boards fetched from Supabase (not owned by me)
+    let remoteBoards = [];
+
+    // Whether the currently active board belongs to someone else
+    let readOnly = false;
+
+    function setReadOnly(val) {
+      readOnly = val;
+      document.body.classList.toggle('read-only', val);
+    }
 
     function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -1234,11 +1333,69 @@
     }
 
     function saveBoard() {
-      if (!activeId) return;
+      if (!activeId || readOnly) return;
       const boards = getAllBoards();
       const board = boards.find(b => b.id === activeId);
-      if (board) board.items = currentItemsFromDOM();
+      if (!board) return;
+      board.items = currentItemsFromDOM();
       setAllBoards(boards);
+      if (board.isPublic) syncBoardToSupabase(board);
+    }
+
+    // ── Supabase board sync ──
+    const BOARDS_TABLE = 'public_boards';
+
+    async function syncBoardToSupabase(board) {
+      try {
+        await sb.from(BOARDS_TABLE).upsert({
+          id: board.id,
+          name: board.name,
+          items: board.items,
+          owner_id: myOwnerId,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+      } catch (e) { console.warn('Sync failed', e); }
+    }
+
+    async function removeFromSupabase(id) {
+      try { await sb.from(BOARDS_TABLE).delete().eq('id', id); } catch (e) { console.warn(e); }
+    }
+
+    async function fetchPublicBoards() {
+      try {
+        const { data, error } = await sb.from(BOARDS_TABLE).select('*').neq('owner_id', myOwnerId);
+        if (error) throw error;
+        return (data || []).map(row => ({
+          id: row.id,
+          name: row.name,
+          items: row.items || [],
+          ownerId: row.owner_id,
+          isPublic: true,
+          remote: true,
+        }));
+      } catch (e) { console.warn('fetchPublicBoards failed', e); return []; }
+    }
+
+    async function publishBoard(id) {
+      const boards = getAllBoards();
+      const board = boards.find(b => b.id === id);
+      if (!board) return;
+      board.isPublic = true;
+      setAllBoards(boards);
+      await syncBoardToSupabase(board);
+      renderSidebar();
+      showToast('Board is now public');
+    }
+
+    async function unpublishBoard(id) {
+      const boards = getAllBoards();
+      const board = boards.find(b => b.id === id);
+      if (!board) return;
+      board.isPublic = false;
+      setAllBoards(boards);
+      await removeFromSupabase(id);
+      renderSidebar();
+      showToast('Board is now private');
     }
 
     function clearGrid() {
@@ -1266,9 +1423,10 @@
     function switchBoard(id) {
       saveBoard(); // save current before switching
       activeId = id;
-      const boards = getAllBoards();
-      const board = boards.find(b => b.id === id);
+      const board = getAllBoards().find(b => b.id === id)
+                 || remoteBoards.find(b => b.id === id);
       if (!board) return;
+      setReadOnly(board.remote === true);
       toolbarBoardName.textContent = board.name;
       renderBoardItems(board.items);
       renderSidebar();
@@ -1276,7 +1434,7 @@
 
     function createBoard(name) {
       saveBoard();
-      const board = { id: uid(), name: name || 'Untitled', items: [] };
+      const board = { id: uid(), name: name || 'Untitled', items: [], ownerId: myOwnerId, isPublic: false };
       const boards = getAllBoards();
       boards.push(board);
       setAllBoards(boards);
@@ -1289,15 +1447,20 @@
     function renameBoard(id, name) {
       const boards = getAllBoards();
       const board = boards.find(b => b.id === id);
-      if (board) { board.name = name || 'Untitled'; setAllBoards(boards); }
+      if (!board) return;
+      board.name = name || 'Untitled';
+      setAllBoards(boards);
       if (id === activeId) toolbarBoardName.textContent = board.name;
+      if (board.isPublic) syncBoardToSupabase(board);
     }
 
     function deleteBoard(id) {
       let boards = getAllBoards();
+      const target = boards.find(b => b.id === id);
+      if (target?.isPublic) removeFromSupabase(id);
       boards = boards.filter(b => b.id !== id);
       if (boards.length === 0) {
-        boards.push({ id: uid(), name: 'My Board', items: [] });
+        boards.push({ id: uid(), name: 'My Board', items: [], ownerId: myOwnerId, isPublic: false });
       }
       setAllBoards(boards);
       if (id === activeId) {
@@ -1307,40 +1470,50 @@
       }
     }
 
-    function renderSidebar() {
-      const boards = getAllBoards();
-      sidebarBoards.innerHTML = '';
-      boards.forEach(board => {
-        const item = document.createElement('div');
-        item.className = 'sidebar-board' + (board.id === activeId ? ' active' : '');
-        item.dataset.id = board.id;
+    const SVG_GLOBE = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="M6 1.5C4.5 3 3.5 4.5 3.5 6s1 3 2.5 4.5M6 1.5C7.5 3 8.5 4.5 8.5 6s-1 3-2.5 4.5"/><line x1="1.5" y1="6" x2="10.5" y2="6"/></svg>`;
+    const SVG_LOCK  = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="5" width="7" height="5.5" rx="1.2"/><path d="M4 5V3.8a2 2 0 1 1 4 0V5"/></svg>`;
 
-        const nameEl = document.createElement('span');
-        nameEl.className = 'sidebar-board-name';
-        nameEl.textContent = board.name;
+    function makeBoardItem(board, isRemote = false) {
+      const item = document.createElement('div');
+      item.className = 'sidebar-board'
+        + (board.id === activeId ? ' active' : '')
+        + (isRemote ? ' remote' : '');
+      item.dataset.id = board.id;
 
+      const nameEl = document.createElement('span');
+      nameEl.className = 'sidebar-board-name';
+      nameEl.textContent = board.name;
+
+      if (!isRemote) {
         // Double-click to rename
         nameEl.addEventListener('dblclick', (e) => {
           e.stopPropagation();
           nameEl.contentEditable = 'true';
           nameEl.focus();
-          // Select all text
           const range = document.createRange();
           range.selectNodeContents(nameEl);
           window.getSelection().removeAllRanges();
           window.getSelection().addRange(range);
         });
-
         nameEl.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
           if (e.key === 'Escape') { nameEl.textContent = board.name; nameEl.blur(); }
         });
-
         nameEl.addEventListener('blur', () => {
           nameEl.contentEditable = 'false';
           const newName = nameEl.textContent.trim() || board.name;
           nameEl.textContent = newName;
           renameBoard(board.id, newName);
+        });
+
+        // Visibility toggle
+        const visBtn = document.createElement('button');
+        visBtn.className = 'sidebar-vis-btn' + (board.isPublic ? ' public' : '');
+        visBtn.title = board.isPublic ? 'Public — click to make private' : 'Private — click to make public';
+        visBtn.innerHTML = board.isPublic ? SVG_GLOBE : SVG_LOCK;
+        visBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          board.isPublic ? unpublishBoard(board.id) : publishBoard(board.id);
         });
 
         const delBtn = document.createElement('button');
@@ -1352,16 +1525,51 @@
           deleteBoard(board.id);
         });
 
-        item.append(nameEl, delBtn);
-        item.addEventListener('click', () => {
-          if (board.id !== activeId) switchBoard(board.id);
-        });
+        item.append(nameEl, visBtn, delBtn);
+      } else {
+        // Remote board — read-only globe indicator
+        const globeEl = document.createElement('span');
+        globeEl.className = 'sidebar-vis-btn public';
+        globeEl.style.pointerEvents = 'none';
+        globeEl.innerHTML = SVG_GLOBE;
+        item.append(nameEl, globeEl);
+      }
 
-        sidebarBoards.appendChild(item);
+      item.addEventListener('click', () => {
+        if (board.id !== activeId) switchBoard(board.id);
       });
+
+      return item;
     }
 
-    function initBoards() {
+    function renderSidebar() {
+      const myBoards = getAllBoards();
+      sidebarBoards.innerHTML = '';
+
+      // My boards section
+      const myLabel = document.createElement('div');
+      myLabel.className = 'sidebar-section-label';
+      myLabel.textContent = 'My Boards';
+      sidebarBoards.appendChild(myLabel);
+
+      myBoards.forEach(board => {
+        sidebarBoards.appendChild(makeBoardItem(board, false));
+      });
+
+      // Shared boards section (from Supabase)
+      if (remoteBoards.length > 0) {
+        const sharedLabel = document.createElement('div');
+        sharedLabel.className = 'sidebar-section-label';
+        sharedLabel.textContent = 'Shared';
+        sidebarBoards.appendChild(sharedLabel);
+
+        remoteBoards.forEach(board => {
+          sidebarBoards.appendChild(makeBoardItem(board, true));
+        });
+      }
+    }
+
+    async function initBoards() {
       let boards = getAllBoards();
 
       // Migrate legacy single-board data
@@ -1378,11 +1586,23 @@
       }
 
       if (boards.length === 0) {
-        boards = [{ id: uid(), name: 'My Board', items: [] }];
+        boards = [{ id: uid(), name: 'My Board', items: [], ownerId: myOwnerId, isPublic: false }];
         setAllBoards(boards);
       }
 
+      // Migrate boards that don't have ownerId yet
+      let changed = false;
+      boards.forEach(b => {
+        if (!b.ownerId) { b.ownerId = myOwnerId; changed = true; }
+        if (b.isPublic === undefined) { b.isPublic = false; changed = true; }
+      });
+      if (changed) setAllBoards(boards);
+
+      // Fetch public boards from Supabase
+      remoteBoards = await fetchPublicBoards();
+
       activeId = boards[0].id;
+      setReadOnly(false);
       toolbarBoardName.textContent = boards[0].name;
       renderSidebar();
       renderBoardItems(boards[0].items);
@@ -1409,6 +1629,7 @@
 
     function makeDraggable(card) {
       card.addEventListener('pointerdown', (e) => {
+        if (readOnly) return;
         if (e.target.closest('.card-delete, .card-edit')) return;
         if (e.button !== 0) return;
 
@@ -1814,6 +2035,7 @@
     });
 
     document.getElementById('btn-clear').addEventListener('click', () => {
+      if (readOnly) return;
       clearGrid();
       saveBoard();
     });

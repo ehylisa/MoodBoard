@@ -1430,6 +1430,8 @@
       toolbarBoardName.textContent = board.name;
       renderBoardItems(board.items);
       renderSidebar();
+      // Hide all remote cursors — they'll reappear if the other user is on this board
+      Object.keys(remoteCursors).forEach(removeCursor);
     }
 
     function createBoard(name) {
@@ -2242,8 +2244,10 @@
       return remoteCursors[id];
     }
 
-    function moveCursor(id, color, name, x, y) {
+    function moveCursor(id, color, name, x, y, boardId) {
       if (id === myId) return;
+      // Hide cursor if sender is on a different board
+      if (boardId !== activeId) { removeCursor(id); return; }
       const cursor = getOrCreateCursor(id, color, name);
       cursor.el.style.transform = `translate(${x}px, ${y}px)`;
       cursor.el.style.opacity = '1';
@@ -2267,7 +2271,7 @@
 
     cursorChannel
       .on('broadcast', { event: 'move' }, ({ payload }) => {
-        moveCursor(payload.id, payload.color, payload.name, payload.x, payload.y);
+        moveCursor(payload.id, payload.color, payload.name, payload.x, payload.y, payload.boardId);
       })
       .on('broadcast', { event: 'leave' }, ({ payload }) => {
         removeCursor(payload.id);
@@ -2282,7 +2286,7 @@
       lastSent = now;
       cursorChannel.send({
         type: 'broadcast', event: 'move',
-        payload: { id: myId, color: myColor, name: myName, x: e.clientX, y: e.clientY },
+        payload: { id: myId, color: myColor, name: myName, x: e.clientX, y: e.clientY, boardId: activeId },
       });
     });
 
@@ -2304,6 +2308,7 @@
 
     chatChannel
       .on('broadcast', { event: 'chat' }, ({ payload }) => {
+        if (payload.boardId !== activeId) return;
         showChatLine(payload.text, payload.x, payload.y, payload.color);
       })
       .subscribe();
@@ -2348,7 +2353,7 @@
             showChatLine(text, chatX, chatY, myColor);
             chatChannel.send({
               type: 'broadcast', event: 'chat',
-              payload: { text, x: chatX, y: chatY, color: myColor },
+              payload: { text, x: chatX, y: chatY, color: myColor, boardId: activeId },
             });
             chatInput.value = '';
             positionChatWrap();

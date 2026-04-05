@@ -672,15 +672,19 @@
     .text-card,
     .link-card {
       cursor: grab;
-      transition: box-shadow 0.15s;
+      transition: box-shadow 0.2s, opacity 0.2s;
       user-select: none;
+      touch-action: none;
+      will-change: auto;
     }
 
     .dragging {
-      cursor: grabbing;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.16);
+      cursor: grabbing !important;
+      box-shadow: 0 20px 48px rgba(0,0,0,0.22);
       z-index: 100;
-      transition: none; /* no transition while actively dragging */
+      transition: box-shadow 0.15s, opacity 0.15s;
+      will-change: transform;
+      opacity: 0.92;
     }
 
     /* ── Export ── */
@@ -1634,41 +1638,57 @@
         if (readOnly) return;
         if (e.target.closest('.card-delete, .card-edit')) return;
         if (e.button !== 0) return;
+        e.preventDefault();
 
         const startPX  = e.clientX;
         const startPY  = e.clientY;
         const origLeft = parseFloat(card.style.left) || 0;
         const origTop  = parseFloat(card.style.top)  || 0;
         let didDrag = false;
+        let curDx = 0, curDy = 0;
+        let raf = null;
+
+        // Capture immediately so pointer events keep coming even if cursor leaves the card
+        card.setPointerCapture(e.pointerId);
 
         function onMove(e) {
-          const dx = e.clientX - startPX;
-          const dy = e.clientY - startPY;
+          curDx = e.clientX - startPX;
+          curDy = e.clientY - startPY;
 
           if (!didDrag) {
-            if (Math.hypot(dx, dy) < 5) return; // below threshold — not a drag yet
+            if (Math.hypot(curDx, curDy) < 4) return;
             didDrag = true;
-            card.setPointerCapture(e.pointerId);
             card.classList.add('dragging');
           }
 
-          card.style.left = Math.max(0, origLeft + dx) + 'px';
-          card.style.top  = Math.max(0, origTop  + dy) + 'px';
+          // Use transform during drag — compositor-only, no layout
+          if (raf) return;
+          raf = requestAnimationFrame(() => {
+            raf = null;
+            card.style.transform = `translate(${curDx}px, ${curDy}px) scale(1.02)`;
+          });
         }
 
         function onUp() {
+          if (raf) { cancelAnimationFrame(raf); raf = null; }
           card.classList.remove('dragging');
           card.removeEventListener('pointermove', onMove);
-          card.removeEventListener('pointerup', onUp);
+          card.removeEventListener('pointerup',   onUp);
+          card.removeEventListener('pointercancel', onUp);
+
           if (didDrag) {
+            // Commit transform back to left/top so position is stored correctly
+            card.style.transform = '';
+            card.style.left = Math.max(0, origLeft + curDx) + 'px';
+            card.style.top  = Math.max(0, origTop  + curDy) + 'px';
             saveBoard();
-            // Suppress the click that fires after pointerup so links don't open on drag-release
             card.addEventListener('click', e => e.preventDefault(), { once: true, capture: true });
           }
         }
 
-        card.addEventListener('pointermove', onMove);
-        card.addEventListener('pointerup', onUp);
+        card.addEventListener('pointermove',  onMove);
+        card.addEventListener('pointerup',    onUp);
+        card.addEventListener('pointercancel', onUp);
       });
     }
 
